@@ -10,8 +10,15 @@ export const uploadImage = async (req, res, next) => {
     const b64 = Buffer.from(req.file.buffer).toString('base64');
     const dataURI = `data:${req.file.mimetype};base64,${b64}`;
 
+    if (!process.env.CLOUDINARY_CLOUD_NAME || process.env.CLOUDINARY_CLOUD_NAME === 'your_cloud_name') {
+      return res.status(201).json({
+        url: dataURI,
+        public_id: `local_${Date.now()}`,
+      });
+    }
+
     const result = await cloudinary.uploader.upload(dataURI, {
-      folder: 'mern-ai-ecommerce',
+      folder: 'novacart-enterprise',
       resource_type: 'image',
     });
 

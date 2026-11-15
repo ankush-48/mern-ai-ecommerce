@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
@@ -9,20 +9,23 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await login(email, password);
       navigate('/');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Login failed');
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Sign in failed');
     }
   };
 
   return (
     <div className="mx-auto max-w-md px-4 py-16">
-      <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold">Sign In</h1>
+      <form onSubmit={handleSubmit} className="space-y-4 rounded-3xl border bg-white p-7 shadow-sm">
+        <h1 className="text-2xl font-black text-slate-900">Sign In to NovaCart</h1>
+        <p className="text-xs text-slate-500">
+          Demo Admin: <code>admin@novacart.ai</code> / <code>Admin@123</code>
+        </p>
         <input
           required
           type="email"
@@ -43,9 +46,9 @@ export default function LoginPage() {
           Sign In
         </button>
         <p className="text-center text-xs text-slate-500">
-          Don’t have an account?{' '}
-          <Link to="/register" className="font-semibold text-brand-600">
-            Create one
+          New to NovaCart?{' '}
+          <Link to="/register" className="font-bold text-brand-600">
+            Create an account
           </Link>
         </p>
       </form>

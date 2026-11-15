@@ -4,7 +4,7 @@ import Product from '../models/Product.js';
 
 export const chatWithShoppingAssistant = async (message, history = []) => {
   const filterExtractionPrompt = `
-    You are an e-commerce search intent parser. Extract search parameters from the user's message.
+    You are an e-commerce search intent parser for NovaCart.ai. Extract search parameters from the shopper's message.
     User message: "${message}"
     Conversation history: ${JSON.stringify(history.slice(-4))}
   `;
@@ -22,18 +22,9 @@ export const chatWithShoppingAssistant = async (message, history = []) => {
             items: { type: Type.STRING },
             description: 'Relevant product keywords, synonyms, or use-case terms',
           },
-          category: {
-            type: Type.STRING,
-            description: 'Broad category if implied, else empty string',
-          },
-          maxPrice: {
-            type: Type.NUMBER,
-            description: 'Maximum budget in INR if mentioned, else 0',
-          },
-          minPrice: {
-            type: Type.NUMBER,
-            description: 'Minimum budget in INR if mentioned, else 0',
-          },
+          category: { type: Type.STRING },
+          maxPrice: { type: Type.NUMBER },
+          minPrice: { type: Type.NUMBER },
         },
         required: ['keywords', 'category', 'maxPrice', 'minPrice'],
       },
@@ -56,24 +47,26 @@ export const chatWithShoppingAssistant = async (message, history = []) => {
       { description: { $in: regexList } },
       { tags: { $in: regexList } },
       { category: { $in: regexList } },
+      { brand: { $in: regexList } },
     ];
   }
 
   let matchedProducts = await Product.find(mongoQuery)
-    .sort({ rating: -1, numReviews: -1 })
+    .sort({ rating: -1, soldCount: -1 })
     .limit(6)
-    .select('name price category rating numReviews images stock description');
+    .select('name price originalPrice discountPercent category brand rating numReviews images stock description');
 
   if (matchedProducts.length === 0) {
-    matchedProducts = await Product.find({})
+    matchedProducts = await Product.find({ isFeatured: true })
       .sort({ rating: -1 })
       .limit(4)
-      .select('name price category rating numReviews images stock description');
+      .select('name price originalPrice discountPercent category brand rating numReviews images stock description');
   }
 
   const catalogContext = matchedProducts.map((p) => ({
     id: p._id.toString(),
     name: p.name,
+    brand: p.brand,
     price: p.price,
     category: p.category,
     rating: p.rating,
@@ -82,11 +75,8 @@ export const chatWithShoppingAssistant = async (message, history = []) => {
   }));
 
   const assistantPrompt = `
-    You are Nova, a friendly, concise AI Shopping Assistant for an Indian online store (prices in ₹ INR).
-    Answer the shopper's query using ONLY the matching catalog products provided below.
-    If exact matches weren't found, politely mention what's closest in our catalog.
-    Keep your reply under 90 words, warm, and actionable.
-
+    You are Nova, a warm, expert AI Shopping Concierge for NovaCart.ai (prices in ₹ INR).
+    Recommend the best matching products from Catalog matches below. Keep your response under 85 words, helpful, and specific.
     Shopper query: "${message}"
     Catalog matches: ${JSON.stringify(catalogContext)}
   `;
@@ -99,15 +89,8 @@ export const chatWithShoppingAssistant = async (message, history = []) => {
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          reply: {
-            type: Type.STRING,
-            description: 'Conversational recommendation response to the shopper',
-          },
-          recommendedProductIds: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: 'IDs of up to 3 best matching products from Catalog matches',
-          },
+          reply: { type: Type.STRING },
+          recommendedProductIds: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
         required: ['reply', 'recommendedProductIds'],
       },
@@ -127,8 +110,8 @@ export const chatWithShoppingAssistant = async (message, history = []) => {
 
 export const parseSemanticSearchQuery = async (naturalQuery) => {
   const prompt = `
-    Convert this natural-language shopping search query into structured e-commerce search parameters.
-    Include synonyms, related item types, and use-case keywords so a MongoDB regex/text query finds all relevant items.
+    Convert this natural-language shopping query into structured e-commerce search parameters.
+    Include 5-8 synonyms, item types, and use-case keywords so a MongoDB query matches all relevant products.
     Query: "${naturalQuery}"
   `;
 
@@ -140,23 +123,10 @@ export const parseSemanticSearchQuery = async (naturalQuery) => {
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          expandedTerms: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: '5 to 8 related product keywords and synonyms',
-          },
-          suggestedCategory: {
-            type: Type.STRING,
-            description: 'Matching product category if obvious, otherwise empty string',
-          },
-          maxPrice: {
-            type: Type.NUMBER,
-            description: 'Upper price limit in INR if stated, otherwise 0',
-          },
-          intentSummary: {
-            type: Type.STRING,
-            description: 'Short 1-line explanation of what the AI understood',
-          },
+          expandedTerms: { type: Type.ARRAY, items: { type: Type.STRING } },
+          suggestedCategory: { type: Type.STRING },
+          maxPrice: { type: Type.NUMBER },
+          intentSummary: { type: Type.STRING },
         },
         required: ['expandedTerms', 'suggestedCategory', 'maxPrice', 'intentSummary'],
       },
@@ -168,17 +138,14 @@ export const parseSemanticSearchQuery = async (naturalQuery) => {
 
 export const generateProductListing = async ({ productName, roughNotes, category, imageFile }) => {
   const promptText = `
-    You are an expert e-commerce copywriter and SEO specialist.
-    Generate a high-converting product listing based on the provided details${imageFile ? ' and product image' : ''}.
-    - Product Name / Draft Title: ${productName || 'Infer from image'}
+    You are a Senior E-Commerce Merchandiser & SEO Copywriter.
+    Generate a high-converting product listing based on the inputs${imageFile ? ' and uploaded product photo' : ''}.
+    - Product Name / Draft: ${productName || 'Infer from image'}
     - Category: ${category || 'Infer from context'}
-    - Rough Bullet Points / Notes: ${roughNotes || 'None provided — infer key visual features from image'}
-
-    Return clean, persuasive copy tailored for modern online shoppers.
+    - Rough Notes: ${roughNotes || 'Infer visual features and build materials from image'}
   `;
 
   const contents = [promptText];
-
   if (imageFile) {
     contents.push({
       inlineData: {
@@ -212,7 +179,7 @@ export const generateProductListing = async ({ productName, roughNotes, category
 
 export const summarizeProductReviews = async (product) => {
   if (!product.reviews || product.reviews.length < 3) {
-    throw new Error('At least 3 customer reviews are required to generate an AI summary.');
+    throw new Error('At least 3 customer reviews are required for AI summarization.');
   }
 
   if (
@@ -224,11 +191,11 @@ export const summarizeProductReviews = async (product) => {
   }
 
   const formattedReviews = product.reviews
-    .map((r, idx) => `Review ${idx + 1} (${r.rating}/5 stars): "${r.comment}"`)
+    .map((r, idx) => `Review ${idx + 1} (${r.rating}/5): "${r.comment}"`)
     .join('\n');
 
   const prompt = `
-    Analyze all customer reviews below for "${product.name}" and synthesize an unbiased Pros & Cons summary.
+    Analyze all customer reviews for "${product.name}" and produce an objective Pros & Cons summary.
     Reviews:
     ${formattedReviews}
   `;
@@ -251,7 +218,6 @@ export const summarizeProductReviews = async (product) => {
   });
 
   const summary = JSON.parse(response.text);
-
   product.aiReviewSummary = {
     pros: summary.pros,
     cons: summary.cons,

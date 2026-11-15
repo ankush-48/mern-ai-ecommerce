@@ -43,10 +43,14 @@ export const aiSemanticSearch = async (req, res, next) => {
         { description: { $in: regexes } },
         { tags: { $in: regexes } },
         { category: { $in: regexes } },
+        { brand: { $in: regexes } },
       ];
     }
 
-    const products = await Product.find(mongoFilter).sort({ rating: -1, numReviews: -1 });
+    const products = await Product.find(mongoFilter)
+      .sort({ rating: -1, soldCount: -1 })
+      .limit(32)
+      .lean();
 
     res.json({
       products,
@@ -65,7 +69,7 @@ export const aiGenerateListing = async (req, res, next) => {
 
     if (!productName && !roughNotes && !imageFile) {
       res.status(400);
-      throw new Error('Provide at least a product name, rough notes, or an image');
+      throw new Error('Provide a product name, rough notes, or an image');
     }
 
     const generated = await generateProductListing({

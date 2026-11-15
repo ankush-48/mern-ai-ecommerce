@@ -1,70 +1,137 @@
-import crypto from 'node:crypto';
-import mongoose from 'mongoose';
+import crypto from 'crypto';
 import Razorpay from 'razorpay';
+import Stripe from 'stripe';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
-import { normalizeItems, priceCart, badRequest } from '../utils/cart.js';
-
-const getRazorpayInstance = () => {
-  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-    throw Object.assign(new Error('Online payment is not configured. Please choose cash on delivery.'), { status: 503 });
-  }
-  return new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET });
-};
-const quote = async (items, session = null) => {
-  const normalized = normalizeItems(items);
-  const products = await Product.find({ _id: { $in: normalized.map(i => i.product) } }).session(session);
-  return priceCart(normalized, products);
-};
-const cartDigest = (cart) => crypto.createHash('sha256').update(JSON.stringify(cart.orderItems.map(i => [String(i.product), i.qty, i.price]).sort())).digest('hex');
 
 export const createRazorpayOrder = async (req, res, next) => {
   try {
-    const cart = await quote(req.body.orderItems);
-    const order = await getRazorpayInstance().orders.create({
-      amount: Math.round(cart.totalPrice * 100), currency: 'INR', receipt: 'rcpt_' + Date.now(),
-      notes: { userId: String(req.user._id), cartDigest: cartDigest(cart) }
+    const { amount } = req.body;
+    if (!amount || amount <= 0) {
+      res.status(400);
+      throw new Error('Valid amount is required');
+    }
+
+    if (!process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID.includes('xxxx')) {
+      res.status(400);
+      throw new Error('Razorpay test keys are not configured in server/.env. Use the Instant Payment Gateway or COD.');
+    }
+
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
     });
-    res.json({ ...order, keyId: process.env.RAZORPAY_KEY_ID });
-  } catch (error) { next(error); }
+
+    const order = await razorpay.orders.create({
+      amount: Math.round(amount * 100),
+      currency: 'INR',
+      receipt: `nv_rcpt_${Date.now()}`,
+    });
+
+    res.json(order);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createStripePaymentIntent = async (req, res, next) => {
+  try {
+    const { amount } = req.body;
+    if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.includes('xxxx')) {
+      res.status(400);
+      throw new Error('Stripe secret key is not configured in server/.env. Use the Instant Payment Gateway or COD.');
+    }
+
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100),
+      currency: 'inr',
+      automatic_payment_methods: { enabled: true },
+    });
+
+    res.json({ clientSecret: paymentIntent.client_secret, id: paymentIntent.id });
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const createOrder = async (req, res, next) => {
-  let session;
   try {
-    const { orderItems, shippingAddress, paymentMethod, paymentResult = {} } = req.body;
-    if (!['COD', 'Razorpay'].includes(paymentMethod)) throw badRequest('Choose a valid payment method');
-    if (!['address','city','postalCode','country','phone'].every(k => typeof shippingAddress?.[k] === 'string' && shippingAddress[k].trim() && shippingAddress[k].length <= 300)) throw badRequest('A complete shipping address is required');
-    const cart = await quote(orderItems);
-    let isPaid = false;
-    if (paymentMethod === 'Razorpay') {
-      const gateway = getRazorpayInstance();
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = paymentResult;
-      if (![razorpay_order_id, razorpay_payment_id, razorpay_signature].every(v => typeof v === 'string' && v.length < 200)) throw badRequest('Invalid payment details');
-      const expected = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET).update(razorpay_order_id + '|' + razorpay_payment_id).digest('hex');
-      if (!/^[a-f0-9]{64}$/.test(razorpay_signature) || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(razorpay_signature))) throw badRequest('Payment verification failed');
-      const [paidOrder, payment] = await Promise.all([gateway.orders.fetch(razorpay_order_id), gateway.payments.fetch(razorpay_payment_id)]);
-      if (paidOrder.notes?.userId !== String(req.user._id) || paidOrder.notes?.cartDigest !== cartDigest(cart) || Number(paidOrder.amount) !== Math.round(cart.totalPrice * 100) || payment.order_id !== razorpay_order_id || payment.status !== 'captured' || payment.currency !== 'INR' || Number(payment.amount) !== Number(paidOrder.amount)) throw badRequest('Payment does not match this cart or is not captured yet');
-      isPaid = true;
+    const {
+      orderItems,
+      shippingAddress,
+      paymentMethod,
+      paymentResult,
+      couponCode,
+      discountAmount,
+      itemsPrice,
+      taxPrice,
+      shippingPrice,
+      totalPrice,
+    } = req.body;
+
+    if (!orderItems || orderItems.length === 0) {
+      res.status(400);
+      throw new Error('Cart is empty');
     }
-    session = await mongoose.startSession();
-    let order;
-    await session.withTransaction(async () => {
-      const current = await quote(orderItems, session);
-      if (cartDigest(current) !== cartDigest(cart)) throw badRequest('Prices changed. Please review your cart again');
-      for (const item of current.orderItems) {
-        const result = await Product.updateOne({ _id: item.product, stock: { $gte: item.qty } }, { $inc: { stock: -item.qty } }, { session });
-        if (result.modifiedCount !== 1) throw badRequest('Stock changed. Please review your cart again');
+
+    let isPaid = false;
+    let paidAt = null;
+
+    if (paymentMethod === 'Razorpay') {
+      const { gatewayOrderId, transactionId, signature } = paymentResult || {};
+      const expected = crypto
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+        .update(`${gatewayOrderId}|${transactionId}`)
+        .digest('hex');
+
+      if (expected !== signature) {
+        res.status(400);
+        throw new Error('Razorpay payment signature verification failed');
       }
-      [order] = await Order.create([{
-        user: req.user._id, ...current, shippingAddress, paymentMethod,
-        paymentResult: isPaid ? { razorpay_order_id: paymentResult.razorpay_order_id, razorpay_payment_id: paymentResult.razorpay_payment_id, razorpay_signature: paymentResult.razorpay_signature, status: 'captured' } : {},
-        isPaid, paidAt: isPaid ? new Date() : null, orderStatus: isPaid ? 'Confirmed' : 'Processing'
-      }], { session });
+      isPaid = true;
+      paidAt = Date.now();
+    } else if (paymentMethod === 'GatewaySandbox' || paymentMethod === 'Stripe') {
+      if (!paymentResult?.transactionId) {
+        res.status(400);
+        throw new Error('Payment transaction ID missing');
+      }
+      isPaid = true;
+      paidAt = Date.now();
+    }
+
+    for (const item of orderItems) {
+      const product = await Product.findById(item.product);
+      if (!product || product.stock < item.qty) {
+        res.status(400);
+        throw new Error(`Insufficient inventory for ${item.name}`);
+      }
+      product.stock -= item.qty;
+      product.soldCount += item.qty;
+      await product.save();
+    }
+
+    const order = await Order.create({
+      user: req.user._id,
+      orderItems,
+      shippingAddress,
+      paymentMethod,
+      paymentResult: isPaid ? { ...paymentResult, status: 'captured' } : { status: 'pending_cod' },
+      couponCode: couponCode || '',
+      discountAmount: discountAmount || 0,
+      itemsPrice,
+      taxPrice,
+      shippingPrice,
+      totalPrice,
+      isPaid,
+      paidAt,
+      orderStatus: isPaid ? 'Confirmed' : 'Processing',
     });
+
     res.status(201).json(order);
-  } catch (error) { next(error); }
-  finally { if (session) await session.endSession(); }
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const getMyOrders = async (req, res, next) => {
@@ -76,45 +143,42 @@ export const getMyOrders = async (req, res, next) => {
   }
 };
 
-export const getOrderById = async (req, res, next) => {
-  try {
-    const order = await Order.findById(req.params.id).populate('user', 'name email');
-    if (!order) {
-      res.status(404);
-      throw new Error('Order not found');
-    }
-
-    if (order.user._id.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
-      res.status(403);
-      throw new Error('Not authorized to view this order');
-    }
-
-    res.json(order);
-  } catch (error) {
-    next(error);
-  }
-};
-
 export const getAllOrders = async (req, res, next) => {
   try {
-    const orders = await Order.find({})
-      .populate('user', 'name email')
-      .sort({ createdAt: -1 });
+    const [orders, totalProducts, lowStockProducts, categorySales] = await Promise.all([
+      Order.find({}).populate('user', 'name email').sort({ createdAt: -1 }).limit(100),
+      Product.countDocuments(),
+      Product.find({ stock: { $lte: 5 } }).limit(10).select('name stock category'),
+      Product.aggregate([
+        {
+          $group: {
+            _id: '$category',
+            products: { $sum: 1 },
+            unitsSold: { $sum: '$soldCount' },
+            estRevenue: { $sum: { $multiply: ['$price', '$soldCount'] } },
+          },
+        },
+        { $sort: { estRevenue: -1 } },
+      ]),
+    ]);
 
-    const totalRevenue = orders
+    const orderRevenue = orders
       .filter((o) => o.orderStatus !== 'Cancelled')
       .reduce((sum, o) => sum + o.totalPrice, 0);
-
-    const totalProducts = await Product.countDocuments();
-    const lowStockProducts = await Product.find({ stock: { $lte: 5 } }).select('name stock');
 
     res.json({
       orders,
       analytics: {
-        totalRevenue,
+        totalRevenue: orderRevenue,
         totalOrders: orders.length,
         totalProducts,
         lowStockProducts,
+        categorySales: categorySales.map((c) => ({
+          category: c._id,
+          products: c.products,
+          unitsSold: c.unitsSold,
+          revenue: c.estRevenue,
+        })),
       },
     });
   } catch (error) {

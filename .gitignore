@@ -4,5 +4,7 @@ dist/
 .env.*
 !.env.example
 *.log
-.DS_Store
-coverage/
+local-preview/db/
+local-preview/mongodb-binaries/
+local-preview/seeded
+local-preview/stop.request

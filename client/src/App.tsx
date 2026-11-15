@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 
 import Navbar from './components/common/Navbar';
+import CartDrawer from './components/common/CartDrawer';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import AIChatWidget from './components/ai/AIChatWidget';
 
@@ -26,6 +27,7 @@ export default function App() {
           <Toaster position="top-right" />
           <div className="flex min-h-screen flex-col">
             <Navbar />
+            <CartDrawer />
             <main className="flex-1">
               <Routes>
                 <Route path="/" element={<HomePage />} />

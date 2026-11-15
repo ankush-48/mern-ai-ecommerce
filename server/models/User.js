@@ -1,44 +1,26 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+const addressSchema = new mongoose.Schema({
+  label: { type: String, default: 'Home' },
+  fullName: { type: String, default: '' },
+  address: { type: String, default: '' },
+  city: { type: String, default: '' },
+  state: { type: String, default: '' },
+  postalCode: { type: String, default: '' },
+  country: { type: String, default: 'India' },
+  phone: { type: String, default: '' },
+});
+
 const userSchema = new mongoose.Schema(
   {
-    name: {
-      type: String,
-      required: [true, 'Please provide your name'],
-      trim: true,
-    },
-    email: {
-      type: String,
-      required: [true, 'Please provide an email address'],
-      unique: true,
-      lowercase: true,
-      trim: true,
-    },
-    password: {
-      type: String,
-      required: [true, 'Please provide a password'],
-      minlength: 6,
-      select: false,
-    },
-    role: {
-      type: String,
-      enum: ['customer', 'admin'],
-      default: 'customer',
-    },
-    shippingAddress: {
-      address: { type: String, default: '' },
-      city: { type: String, default: '' },
-      postalCode: { type: String, default: '' },
-      country: { type: String, default: 'India' },
-      phone: { type: String, default: '' },
-    },
-    wishlist: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Product',
-      },
-    ],
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    password: { type: String, required: true, minlength: 6, select: false },
+    role: { type: String, enum: ['customer', 'admin'], default: 'customer' },
+    avatar: { type: String, default: '' },
+    shippingAddress: { type: addressSchema, default: () => ({}) },
+    wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
   },
   { timestamps: true }
 );

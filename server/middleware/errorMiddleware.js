@@ -5,19 +5,18 @@ export const notFound = (req, res, next) => {
 };
 
 export const errorHandler = (err, req, res, next) => {
-  let statusCode = err.status || (res.statusCode < 400 ? 500 : res.statusCode);
+  let statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   let message = err.message || 'Internal Server Error';
 
   if (err.name === 'CastError' && err.kind === 'ObjectId') {
     statusCode = 404;
-    message = 'Resource not found';
+    message = 'Requested resource was not found';
   }
 
-  if (err.name === 'ValidationError') { statusCode = 400; message = Object.values(err.errors).map(e => e.message).join('; '); }
   if (err.code === 11000) {
     statusCode = 400;
-    const field = Object.keys(err.keyValue || {})[0] || 'value';
-    message = `An account with that ${field} already exists`;
+    const field = Object.keys(err.keyValue)[0];
+    message = `Duplicate value for ${field}`;
   }
 
   res.status(statusCode).json({

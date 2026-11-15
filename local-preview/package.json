@@ -1,0 +1,1 @@
+{"name":"novacart-local-preview","private":true,"version":"1.0.0","scripts":{"start":"node start.cjs","configure":"node configure-env.cjs initialize","keys":"node key-form.cjs"},"dependencies":{"mongodb":"^7.0.0","mongodb-memory-server":"11.3.0"},"engines":{"node":">=22"}}

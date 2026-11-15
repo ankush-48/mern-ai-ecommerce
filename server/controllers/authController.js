@@ -12,7 +12,7 @@ export const registerUser = async (req, res, next) => {
     const userExists = await User.findOne({ email });
     if (userExists) {
       res.status(400);
-      throw new Error('User already exists with this email');
+      throw new Error('An account with this email already exists');
     }
 
     const user = await User.create({ name, email, password });
@@ -42,13 +42,14 @@ export const loginUser = async (req, res, next) => {
 
     generateTokenAndSetCookie(res, user._id);
 
+    const populated = await User.findById(user._id).populate('wishlist');
     res.json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      shippingAddress: user.shippingAddress,
-      wishlist: user.wishlist,
+      _id: populated._id,
+      name: populated.name,
+      email: populated.email,
+      role: populated.role,
+      shippingAddress: populated.shippingAddress,
+      wishlist: populated.wishlist,
     });
   } catch (error) {
     next(error);
@@ -56,12 +57,7 @@ export const loginUser = async (req, res, next) => {
 };
 
 export const logoutUser = (req, res) => {
-  res.cookie('jwt', '', {
-    httpOnly: true,
-    expires: new Date(0),
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-  });
+  res.cookie('jwt', '', { httpOnly: true, expires: new Date(0) });
   res.json({ message: 'Logged out successfully' });
 };
 
@@ -84,21 +80,15 @@ export const updateUserProfile = async (req, res, next) => {
 
     user.name = req.body.name || user.name;
     if (req.body.shippingAddress) {
-      user.shippingAddress = { ...user.shippingAddress, ...req.body.shippingAddress };
+      user.shippingAddress = { ...user.shippingAddress.toObject(), ...req.body.shippingAddress };
     }
     if (req.body.password) {
       user.password = req.body.password;
     }
 
-    const updatedUser = await user.save();
-    res.json({
-      _id: updatedUser._id,
-      name: updatedUser.name,
-      email: updatedUser.email,
-      role: updatedUser.role,
-      shippingAddress: updatedUser.shippingAddress,
-      wishlist: updatedUser.wishlist,
-    });
+    await user.save();
+    const updatedUser = await User.findById(req.user._id).populate('wishlist');
+    res.json(updatedUser);
   } catch (error) {
     next(error);
   }

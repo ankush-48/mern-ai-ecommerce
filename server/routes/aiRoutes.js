@@ -13,13 +13,6 @@ const router = express.Router();
 router.post('/chat', aiChat);
 router.post('/semantic-search', aiSemanticSearch);
 router.get('/review-summary/:productId', aiReviewSummary);
-
-router.post(
-  '/generate-listing',
-  protect,
-  adminOnly,
-  upload.single('image'),
-  aiGenerateListing
-);
+router.post('/generate-listing', protect, adminOnly, upload.single('image'), aiGenerateListing);
 
 export default router;
