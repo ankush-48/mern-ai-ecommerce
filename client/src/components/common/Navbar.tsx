@@ -84,8 +84,7 @@ export default function Navbar() {
       <div className="bg-slate-900 px-4 py-1.5 text-center text-[11px] font-medium text-slate-200">
         <span className="inline-flex items-center gap-1.5">
           <Sparkles className="h-3 w-3 text-indigo-400" />
-          2,500+ Verified Products • Free Express Shipping above ₹999 • Use code{' '}
-          <strong className="text-indigo-300">NOVA10</strong> for 10% OFF
+          Demo storefront • 2,500 sample products • Checkout uses test data
         </span>
       </div>
 

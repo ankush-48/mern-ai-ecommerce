@@ -81,7 +81,7 @@ export default function HomePage() {
           >
             <span className="inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-4 py-1.5 text-xs font-bold text-indigo-200 backdrop-blur">
               <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-              Powered by Google Gemini 2.5 • {totalCatalog.toLocaleString('en-IN')}+ Live Products
+              Powered by Google Gemini • {totalCatalog.toLocaleString('en-IN')} Sample Products
             </span>
 
             <h1 className="mx-auto mt-6 max-w-4xl text-4xl font-black tracking-tight sm:text-6xl lg:text-7xl">
@@ -92,7 +92,7 @@ export default function HomePage() {
             </h1>
 
             <p className="mx-auto mt-5 max-w-2xl text-base text-slate-300 sm:text-lg">
-              Describe your exact scenario, aesthetic, or budget in plain English. NovaCart’s semantic AI searches across thousands of verified items instantly.
+              Describe your exact scenario, aesthetic, or budget in plain English. NovaCart’s semantic AI searches across thousands of sample catalog items.
             </p>
 
             <form
@@ -141,8 +141,8 @@ export default function HomePage() {
           {[
             { icon: Zap, title: 'Gemini Semantic Engine', desc: 'Intent-aware search & AI concierge' },
             { icon: Truck, title: 'Express PAN-India Delivery', desc: 'Free shipping on orders above ₹999' },
-            { icon: ShieldCheck, title: 'Multi-Gateway Security', desc: 'Razorpay, Stripe, UPI & COD protected' },
-            { icon: Award, title: 'AI Review Intelligence', desc: 'Verified Pros & Cons on top items' },
+            { icon: ShieldCheck, title: 'Demo Checkout', desc: 'Payment simulator & cash on delivery' },
+            { icon: Award, title: 'AI Review Summaries', desc: 'Available when reviews are added' },
           ].map(({ icon: Icon, title, desc }) => (
             <div key={title} className="flex items-center gap-3.5">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-brand-600">
