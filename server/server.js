@@ -15,9 +15,9 @@ import aiRoutes from './routes/aiRoutes.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 
 dotenv.config();
-connectDB();
 
 const app = express();
+if (process.env.VERCEL) app.set('trust proxy', 1);
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(compression());
@@ -41,6 +41,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '2.0.0-enterprise', timestamp: new Date().toISOString() });
 });
 
+app.use('/api', async (req, res, next) => {
+  try { await connectDB(); next(); }
+  catch { res.status(503).json({ message: 'The database is temporarily unavailable. Please try again.' }); }
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
@@ -51,6 +56,10 @@ app.use(notFound);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`NovaCart Enterprise API running on port ${PORT}`);
-});
+if (!process.env.VERCEL) {
+  connectDB().then(() => app.listen(PORT, () => {
+    console.log(`NovaCart Enterprise API running on port ${PORT}`);
+  })).catch(() => { console.error('Could not connect to the database.'); process.exitCode = 1; });
+}
+
+export default app;

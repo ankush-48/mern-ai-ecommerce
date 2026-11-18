@@ -1,0 +1,10 @@
+{
+  "name": "novacart-vercel",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "22.x" },
+  "scripts": {
+    "build": "npm run build --prefix client",
+    "start": "npm start --prefix server"
+  }
+}
