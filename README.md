@@ -1,5 +1,11 @@
 # NovaCart AI
 
+## Live Demo
+
+### [Open NovaCart Live →](https://novacart-updated-preview.vercel.app/)
+
+Visit the deployed storefront: [novacart-updated-preview.vercel.app](https://novacart-updated-preview.vercel.app/)
+
 An AI-assisted ecommerce demo built with React, TypeScript, Express, MongoDB, and Google Gemini. Browse a sample catalog, ask for product recommendations, and manage products and orders from an admin dashboard.
 
 **[Live storefront](https://novacart-updated-preview.vercel.app)** · **[Admin sign-in](https://novacart-updated-preview.vercel.app/login)** · **[Deployment guide](VERCEL.md)**
